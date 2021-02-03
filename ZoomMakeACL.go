@@ -76,7 +76,8 @@ func main() {
 
 	ACLStartnumber := flag.Int("sn", 10, "Start number inside ACL")
 	ACLNumberStep := flag.Int("st", 10, "Step")
-	ACLrowForASAPrefix := flag.String("asa", "", "for asa name ACL and line, for example: access-list WCCPREDIRECTACL line")
+	ACLrowForASAPrefix := flag.String("asa", "", "for asa name ACL and line, for example: access-list WCCPREDIRECTACL")
+	ACLnoObjectGroupRowOnlyASA := flag.Bool("asaog", false, "Generate Object Group lines")
 	ACLRowPrefix := flag.String("rp", "permit ip any", "acl rule prefix, for example: permit ip 10.20.30.0 0.0.0.255")
 	ZUUMURLsflags := flag.String("uf", "1.1.1.1", "Flags, 1 - enable URL 0 disable url <zoom>.<soom meetings>.<zoomCRC>.<zoom phones>, example: 1.1.0.1 enable zoom soom meetings and zoom phones")
 	flag.Parse()
@@ -100,10 +101,13 @@ func main() {
 
 	for _, ZOOMCurrentUrlIndexinR := range URLIndexes {
 		ZoomData, ZoomError := http.Get(URLs[ZOOMCurrentUrlIndexinR])
-		RemarkLine := fmt.Sprintf("%s %d remark %s", *ACLrowForASAPrefix, RowNumber, URLs[ZOOMCurrentUrlIndexinR])
-		ACLtextDestination = append(ACLtextDestination, RemarkLine)
-		ACLtextDestinationWildcard = append(ACLtextDestinationWildcard, RemarkLine)
-		RowNumber += *ACLNumberStep
+		if !*ACLnoObjectGroupRowOnlyASA {
+			RemarkLine := fmt.Sprintf("%s %d remark %s", *ACLrowForASAPrefix, RowNumber, URLs[ZOOMCurrentUrlIndexinR])
+			ACLtextDestination = append(ACLtextDestination, RemarkLine)
+			ACLtextDestinationWildcard = append(ACLtextDestinationWildcard, RemarkLine)
+			RowNumber += *ACLNumberStep
+		}
+
 		if ZoomError != nil {
 			fmt.Println(ZoomError)
 			os.Exit(1)
@@ -124,12 +128,22 @@ func main() {
 					if len(IP_prefix[1]) > 0 {
 						Mask := BitMask[IP_prefix[1]]
 						Wildcard := BitMaskWilcard[IP_prefix[1]]
-						ACLRowDestination = fmt.Sprintf("%s %d %s %s %s", *ACLrowForASAPrefix, RowNumber, *ACLRowPrefix, IP_prefix[0], Mask)
-						ACLRowDestinationWildcard = fmt.Sprintf("%s %d %s %s %s", *ACLrowForASAPrefix, RowNumber, *ACLRowPrefix, IP_prefix[0], Wildcard)
+						if *ACLnoObjectGroupRowOnlyASA {
+							ACLRowDestination = fmt.Sprintf("%s %s %s", "network object", IP_prefix[0], Mask)
+						} else {
+							ACLRowDestination = fmt.Sprintf("%s line %d %s %s %s", *ACLrowForASAPrefix, RowNumber, *ACLRowPrefix, IP_prefix[0], Mask)
+							ACLRowDestinationWildcard = fmt.Sprintf("%s line %d %s %s %s", *ACLrowForASAPrefix, RowNumber, *ACLRowPrefix, IP_prefix[0], Wildcard)
+						}
+
 					}
 				} else {
-					ACLRowDestination = fmt.Sprintf("%d %s host %s", RowNumber, *ACLRowPrefix, TrimmedString)
-					ACLRowDestinationWildcard = ACLRowDestination
+					if *ACLnoObjectGroupRowOnlyASA {
+						ACLRowDestination = fmt.Sprintf("%s %s %s", "network object", "host", IP_prefix[0])
+					} else {
+						ACLRowDestination = fmt.Sprintf("%d %s host %s", RowNumber, *ACLRowPrefix, TrimmedString)
+						ACLRowDestinationWildcard = ACLRowDestination
+					}
+
 				}
 				if len(ACLRowDestination) > 7 {
 					ACLtextDestination = append(ACLtextDestination, ACLRowDestination)
@@ -148,9 +162,14 @@ func main() {
 	for _, ACLdataIn := range ACLtextDestinationWildcard {
 		ACLtextWildcard += ACLdataIn + "\n"
 	}
-	if len(*ACLrowForASAPrefix) > 1 {
+	if *ACLnoObjectGroupRowOnlyASA {
 		fmt.Println(ACLtext)
 	} else {
-		fmt.Println(ACLtextWildcard)
+		if len(*ACLrowForASAPrefix) > 1 {
+			fmt.Println(ACLtext)
+		} else {
+			fmt.Println(ACLtextWildcard)
+		}
 	}
+
 }
